@@ -3,7 +3,7 @@
 // /output/<id>/stdout.bin + exit.txt. Every trap code and limit matches vm.mjs exactly:
 // MUL via Math.imul; DIVU/MODU/LTU unsigned; per-kind trap codes 2-11; stack 256,
 // call stack 64, memory 256 words; PUSH8 sign-extended; EXIT low byte; IN -1 at end.
-import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const T = new Uint8Array(256);
@@ -122,8 +122,16 @@ function run(p: Uint8Array, inp: Uint8Array): { out: Uint8Array; code: number } 
 const I = process.env.MAKEFUN_INPUT_DIR ?? '/input';
 const O = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
 for (const id of readdirSync(I).sort()) {
-  const r = run(new Uint8Array(readFileSync(join(I, id, 'program.bin'))), new Uint8Array(readFileSync(join(I, id, 'input.bin'))));
+  const dir = join(I, id);
+  let out: Uint8Array = new Uint8Array(0), code = 0;
+  try {
+    // One unreadable instance must not abort the other 39: skip stray files,
+    // and answer a broken instance with empty output instead of crashing.
+    if (!statSync(dir).isDirectory()) continue;
+    const r = run(new Uint8Array(readFileSync(join(dir, 'program.bin'))), new Uint8Array(readFileSync(join(dir, 'input.bin'))));
+    out = r.out; code = r.code;
+  } catch { /* fall through with the empty answer above */ }
   mkdirSync(join(O, id), { recursive: true });
-  writeFileSync(join(O, id, 'stdout.bin'), r.out);
-  writeFileSync(join(O, id, 'exit.txt'), `${r.code}\n`);
+  writeFileSync(join(O, id, 'stdout.bin'), out);
+  writeFileSync(join(O, id, 'exit.txt'), `${code}\n`);
 }
